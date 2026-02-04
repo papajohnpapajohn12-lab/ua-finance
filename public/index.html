@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UA Finance</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #f3f4f6; color: #1f2937; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        /* Simple Inversion Theme with Contrast Fixes */
+        .invert-mode { 
+            filter: invert(1) hue-rotate(180deg); 
+        }
+        
+        /* 
+           Dark Mode Goal: Black Body (#000000) and Dark Gray Cards (#1c1c1e).
+           
+           Since we are INVERTING:
+           To get Black Body (#000000) -> We need White Body (#ffffff) in "pre-invert" state.
+           To get Dark Gray Cards (#1c1c1e = rgb(28,28,30)) -> We need Light Gray Cards (rgb(227,227,225) = #e3e3e1).
+           
+           Currently:
+           Body is #f3f4f6 -> Inverts to #0c0b09 (Too light/grayish for deep black).
+           Cards are #ffffff -> Inverts to #000000 (Pure black).
+           
+           So we have Gray Background and Black Cards in Dark Mode.
+           User wants: "Separation of black background from black blocks, or lighter background or blocks".
+           
+           Let's swap it to standard iOS Dark Mode feel (Black BG, Gray Cards):
+           -> Set .invert-mode Body to #ffffff (becomes #000000).
+           -> Set .invert-mode Cards to #e5e5e5 (becomes #1a1a1a).
+        */
+        
+        /* Force these colors ONLY when invert-mode is active on HTML */
+        html.invert-mode body {
+            background-color: #ffffff !important; /* Inverts to Black */
+        }
+        
+        html.invert-mode .bg-white {
+            background-color: #f2f2f2 !important; /* Inverts to Dark Gray */
+        }
+        
+        /* Fix shadows in inverted mode (shadows become white glows, which is weird) */
+        html.invert-mode .shadow-sm,
+        html.invert-mode .shadow-md,
+        html.invert-mode .shadow-lg,
+        html.invert-mode .shadow-xl,
+        html.invert-mode .shadow-2xl {
+            box-shadow: none !important; /* Remove shadows in dark mode for flat look */
+            border: 1px solid #e5e5e5; /* Add border for separation (inverts to dark border) */
+        }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .gradient-card { background: linear-gradient(135deg, #000000 0%, #333333 100%); color: white; }
+        
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .stash-card { background: linear-gradient(135deg, #000000 0%, #1f2937 100%); color: white; }
+        
+        @keyframes pulse-logo { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+        .animate-pulse-logo { animation: pulse-logo 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
+        @keyframes slide-down { from { transform: translate(-50%, -100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        .animate-slide-down { animation: slide-down 0.3s ease-out forwards; }
+        
+        @keyframes slide-up-out { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -100%); opacity: 0; } }
+        .animate-slide-up-out { animation: slide-up-out 0.3s ease-in forwards; }
+
+        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes scale-in { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .animate-scale-in { animation: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const USDT_RATE = 43;
+
+        // --- ICONS & HELPERS ---
+        const ICONS = {
+            smoke: <img src="ciga.png?v=2" className="w-full h-full object-contain" />,
+            freelance: <img src="freelance.png?v=2" className="w-full h-full object-contain" />,
+            meta: <img src="meta.png?v=2" className="w-full h-full object-contain" />,
+            food: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>,
+            drink: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 7l-2-2h13l-2 2h-9zm1 8.27l-5.1-7.16h17.2L15.5 15.27V20h2v2H6.5v-2h2v-4.73z"/></svg>,
+            car: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5-1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>,
+            salary: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05 1.18 1.91 2.53 1.91 1.29 0 2.13-.59 2.13-1.66 0-.82-.71-1.21-2.55-1.65-2.26-.54-4.48-1.59-4.48-4.13 0-1.85 1.45-3.08 3.19-3.47V4h2.67v1.93c1.5.33 2.85 1.26 3.06 3h-1.98c-.14-.85-1.11-1.53-2.31-1.53-1.11 0-1.89.52-1.89 1.45 0 .76.62 1.14 2.58 1.63 2.45.61 4.54 1.76 4.54 4.29.01 2.05-1.65 3.39-3.51 3.82z"/></svg>,
+            health: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg>,
+            fun: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>,
+            shopping: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>,
+            other: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>,
+            stash: <svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3-3.87L5.69 14h8.45zm3.28-.54l-2.68-3.35-1.72 2.15 2.68 3.35 1.72-2.15z"/></svg>
+        };
+
+        const MATCHERS = [
+            { id: 'smoke', keys: ['сигарет', 'сигар', 'стик', 'стики', 'стіки', 'табак', 'iqos', 'glo', 'vape', 'pod'] },
+            { id: 'freelance', keys: ['фриланс', 'freelance', 'проект', 'заказ', 'upwork', 'fiverr'] },
+            { id: 'meta', keys: ['meta', 'мета', 'фейсбук', 'facebook', 'ads'] },
+            { id: 'drink', keys: ['алко', 'пиво', 'вино', 'водка', 'бар', 'бухло', 'випивка'] },
+            { id: 'food', keys: ['еда', 'їжа', 'їда', 'ресторан', 'кафе', 'мак', 'kfc', 'бургер', 'суши', 'продукты', 'сильпо', 'атб', 'novus'] },
+            { id: 'car', keys: ['авто', 'машин', 'бензин', 'заправк', 'азс', 'такси', 'uber', 'uklon', 'bolt', 'ремонт авто'] },
+            { id: 'salary', keys: ['зп', 'зарплат', 'аванс', 'фриланс', 'проект', 'доход', 'прибыль'] },
+            { id: 'health', keys: ['аптек', 'лекарств', 'ліки', 'больниц', 'лікар', 'врач', 'здоров'] },
+            { id: 'fun', keys: ['кино', 'фільм', 'ігри', 'steam', 'game', 'розваги', 'клуб', 'боулинг'] },
+            { id: 'shopping', keys: ['одежда', 'одяг', 'магазин', 'покупки', 'техника', 'zara', 'h&m'] }
+        ];
+
+        function getIcon(name) {
+            if (!name) return ICONS.other;
+            const lower = name.toLowerCase();
+            const match = MATCHERS.find(m => m.keys.some(k => lower.includes(k)));
+            return match ? ICONS[match.id] : ICONS.other;
+        }
+
+        function formatMoney(num) {
+            if (num === null || num === undefined) return '0';
+            if (Math.abs(num) >= 1000000) {
+                return new Intl.NumberFormat('uk-UA', { notation: "compact", maximumFractionDigits: 2 }).format(num);
+            }
+            return num.toLocaleString('uk-UA');
+        }
+
+        // --- COMPONENTS ---
+
+        function App() {
+            const [loading, setLoading] = useState(true);
+            const [token, setToken] = useState(localStorage.getItem('token'));
+
+            useEffect(() => {
+                const timer = setTimeout(() => setLoading(false), 2000);
+                return () => clearTimeout(timer);
+            }, []);
+
+            if (loading) return <SplashScreen />;
+            if (!token) return <Auth setToken={setToken} />;
+            return <MainApp token={token} logout={() => { localStorage.removeItem('token'); setToken(null); }} />;
+        }
+
+        function SplashScreen() {
+            return (
+                <div className="h-screen w-full flex items-center justify-center bg-gray-50">
+                    <img src="logo.png" className="w-32 h-32 object-contain animate-pulse-logo" alt="Logo" />
+                </div>
+            )
+        }
+
+        function Auth({ setToken }) {
+            const [isLogin, setIsLogin] = useState(true);
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [showPassword, setShowPassword] = useState(false);
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault(); setError('');
+                
+                // Validation
+                if (!username || !password) return setError('Заповніть всі поля');
+                if (!isLogin) {
+                    if (password.length < 8) return setError('Пароль має бути не менше 8 символів');
+                    if (!/^[a-zA-Z0-9]+$/.test(password)) return setError('Пароль має містити лише латинські літери та цифри');
+                }
+
+                try {
+                    const res = await fetch(isLogin ? '/api/login' : '/api/register', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.token) { 
+                        localStorage.setItem('token', data.token); 
+                        if (data.theme) localStorage.setItem('theme', data.theme);
+                        setToken(data.token); 
+                    } else {
+                        if (data.error === 'USER_EXISTS') setError('Такий користувач вже існує');
+                        else if (data.error === 'USER_NOT_FOUND') setError('Користувача не знайдено');
+                        else if (data.error === 'WRONG_PASSWORD') setError('Невірний пароль');
+                        else setError('Помилка сервера: ' + (data.error || 'Unknown'));
+                    }
+                } catch(e) {
+                    setError('Помилка з\'єднання');
+                }
+            };
+
+            return (
+                <div className="flex h-screen items-center justify-center bg-gray-50 px-6">
+                    <div className="w-full max-w-sm">
+                        <div className="flex justify-center mb-6">
+                            <img src="logo.png" className="w-20 h-20 object-contain" alt="Logo" />
+                        </div>
+                        <h1 className="text-2xl font-bold text-center mb-2">{isLogin ? 'З поверненням' : 'Створення акаунту'}</h1>
+                        <p className="text-center text-gray-500 mb-8 text-sm">Ваш фінансовий асистент</p>
+                        
+                        {error && <div className="p-3 bg-red-50 text-red-500 rounded-xl mb-4 text-sm text-center font-medium animate-pulse">{error}</div>}
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <input className="w-full p-4 rounded-2xl bg-white shadow-sm outline-none border border-gray-100 focus:border-black transition" placeholder="Логін" value={username} onChange={e=>setUsername(e.target.value)} />
+                            <div className="relative">
+                                <input className="w-full p-4 rounded-2xl bg-white shadow-sm outline-none border border-gray-100 focus:border-black transition pr-12" 
+                                    type={showPassword ? "text" : "password"} 
+                                    placeholder="Пароль" 
+                                    value={password} 
+                                    onChange={e=>setPassword(e.target.value)} 
+                                />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black">
+                                    {showPassword ? (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    ) : (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    )}
+                                </button>
+                            </div>
+                            <button className="w-full p-4 bg-black text-white rounded-2xl font-bold shadow-lg active:scale-95 transition">{isLogin ? 'Увійти' : 'Продовжити'}</button>
+                        </form>
+                        <p className="text-center mt-6 text-sm text-gray-400 cursor-pointer hover:text-black" onClick={()=>{setIsLogin(!isLogin); setError('');}}>{isLogin ? 'Створити акаунт' : 'Увійти'}</p>
+                    </div>
+                </div>
+            );
+        }
+
+        function MainApp({ token, logout }) {
+            const [view, setView] = useState('home'); 
+            const [transactions, setTransactions] = useState([]);
+            const [categories, setCategories] = useState([]);
+            const [stashes, setStashes] = useState([]);
+            const [modal, setModal] = useState(null); 
+            const [deleteTxId, setDeleteTxId] = useState(null);
+            const [breakStashId, setBreakStashId] = useState(null);
+            const [toast, setToast] = useState(null);
+            
+            // Invert Mode State (Simple Dark Theme)
+            // Initialize from localStorage to prevent flash
+            const [invertMode, setInvertMode] = useState(localStorage.getItem('theme') === 'dark');
+
+            useEffect(() => {
+                const root = document.documentElement;
+                const themeName = invertMode ? 'dark' : 'light';
+                if (invertMode) {
+                    root.classList.add('invert-mode');
+                } else {
+                    root.classList.remove('invert-mode');
+                }
+                localStorage.setItem('theme', themeName);
+                
+                // Sync with DB
+                fetch('/api/user/theme', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ theme: themeName })
+                }).catch(err => console.error('Failed to sync theme', err));
+                
+            }, [invertMode, token]);
+
+            const showToast = (msg, type='error') => {
+                setToast({ msg, type, id: Date.now() });
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            const refreshData = async () => {
+                try {
+                    const [tx, cat, st] = await Promise.all([
+                        fetch('/api/transactions', { headers: { 'Authorization': `Bearer ${token}` } }).then(r=>r.json()),
+                        fetch('/api/categories', { headers: { 'Authorization': `Bearer ${token}` } }).then(r=>r.json()),
+                        fetch('/api/stashes', { headers: { 'Authorization': `Bearer ${token}` } }).then(r=>r.json())
+                    ]);
+                    setTransactions(Array.isArray(tx) ? tx : []);
+                    setCategories(Array.isArray(cat) ? cat : []);
+                    setStashes(Array.isArray(st) ? st : []);
+                } catch(e) { console.error(e); }
+            };
+
+            useEffect(() => { refreshData(); }, []);
+
+            const deleteCategory = async (id) => {
+                if(!confirm('Видалити категорію?')) return;
+                await fetch(`/api/categories/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                refreshData();
+            };
+
+            const confirmDeleteTx = async () => {
+                if (!deleteTxId) return;
+                await fetch(`/api/transactions/${deleteTxId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                setDeleteTxId(null);
+                refreshData();
+                showToast('Видалено', 'success');
+            }
+
+            const confirmBreakStash = async () => {
+                if (!breakStashId) return;
+                await fetch(`/api/stashes/${breakStashId}/break`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                setBreakStashId(null);
+                refreshData();
+                showToast('Скарбничку розбито!', 'success');
+            }
+
+            const addTx = async (amount, origAmount, cur, cat, type) => {
+                const res = await fetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ type, amount, original_amount: origAmount, currency: cur, category: cat }) });
+                if (!res.ok) {
+                    const d = await res.json();
+                    if(d.error === 'NO_FUNDS') return showToast('Недостатньо коштів на балансі!');
+                    return showToast('Помилка збереження');
+                }
+                setModal(null); refreshData();
+            };
+
+            const addStash = async (title, target, cur) => {
+                await fetch('/api/stashes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ title, target_amount: target, currency: cur }) });
+                setModal(null); refreshData();
+            };
+
+            const depositStash = async (id, amount, uahAmount) => {
+                const res = await fetch(`/api/stashes/${id}/add`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ amount, uah_amount: uahAmount }) });
+                if(!res.ok) return showToast('Недостатньо коштів!');
+                setModal(null); refreshData();
+                showToast('Поповнено!', 'success');
+            };
+
+            const balance = useMemo(() => transactions.reduce((acc, t) => t.type === 'income' ? acc + t.amount : acc - t.amount, 0), [transactions]);
+
+            return (
+                <div className="bg-gray-50 min-h-screen pb-24 font-sans text-gray-900 relative">
+                    {toast && <Toast key={toast.id} msg={toast.msg} type={toast.type} />}
+
+                    <div className="bg-white/80 backdrop-blur-md px-6 py-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-100">
+                        <div className="flex items-center gap-3">
+                            <img src="logo.png" className="w-8 h-8 object-contain" alt="Logo" />
+                            <span className="font-bold text-lg text-gray-900">UA Finance</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <button onClick={() => setInvertMode(!invertMode)} className="p-2 rounded-full hover:bg-gray-100 transition">
+                                {invertMode ? (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                                ) : (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                                )}
+                            </button>
+                            <button onClick={logout} className="p-2 rounded-full hover:bg-gray-100 transition text-gray-900"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 max-w-md mx-auto">
+                        {view === 'home' && <HomeView transactions={transactions} balance={balance} onAdd={(t)=>setModal({type: t})} onDeleteTx={setDeleteTxId} />}
+                        {view === 'analytics' && <AnalyticsView transactions={transactions} />}
+                        {view === 'stash' && <StashView stashes={stashes} onAdd={()=>setModal({type: 'stash'})} onDeposit={(s)=>setModal({type: 'deposit_stash', data: s})} onBreak={setBreakStashId} />}
+                    </div>
+
+                    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 flex justify-around py-3 pb-6 z-20 shadow-lg">
+                        <NavBtn icon={<img src="home.png" className="w-8 h-8 object-contain block mx-auto" />} label="Головна" active={view === 'home'} onClick={() => setView('home')} />
+                        <NavBtn icon={<img src="analytics.png" className="w-8 h-8 object-contain block mx-auto" />} label="Аналітика" active={view === 'analytics'} onClick={() => setView('analytics')} />
+                        <NavBtn icon={<img src="money.png" className="w-8 h-8 object-contain block mx-auto" />} label="Заначка" active={view === 'stash'} onClick={() => setView('stash')} />
+                    </div>
+
+                    {modal && <ModalController modal={modal} close={()=>setModal(null)} categories={categories} deleteCategory={deleteCategory} addTx={addTx} addStash={addStash} depositStash={depositStash} balance={balance} showToast={showToast} />}
+                    {deleteTxId && <ConfirmModal title="Видалити?" onConfirm={confirmDeleteTx} onCancel={()=>setDeleteTxId(null)} />}
+                    {breakStashId && <ConfirmModal title="Розбити скарбничку?" onConfirm={confirmBreakStash} onCancel={()=>setBreakStashId(null)} />}
+                </div>
+            );
+        }
+
+        function Toast({ msg, type }) {
+            const [exiting, setExiting] = useState(false);
+            useEffect(() => {
+                const t = setTimeout(() => setExiting(true), 2700); 
+                return () => clearTimeout(t);
+            }, []);
+
+            return (
+                <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-xl z-[99999] font-bold text-sm ${exiting ? 'animate-slide-up-out' : 'animate-slide-down'} ${type === 'error' ? 'bg-black text-white' : 'bg-white text-black border border-gray-100'}`}>
+                    {msg}
+                </div>
+            )
+        }
+
+        function HomeView({ transactions, balance, onAdd, onDeleteTx }) {
+            // Balance is now passed as prop
+            return (
+                <div className="space-y-6">
+                    <div className="gradient-card p-8 rounded-3xl shadow-xl relative overflow-hidden text-white">
+                        <div className="relative z-10">
+                            <div className="opacity-70 text-sm mb-1 font-medium">Загальний баланс</div>
+                            <div className="text-4xl font-bold tracking-tight">{formatMoney(balance)} ₴</div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <ActionBtn type="income" onClick={() => onAdd('income')} label="Дохід" />
+                        <ActionBtn type="expense" onClick={() => onAdd('expense')} label="Витрата" />
+                    </div>
+                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 divide-y divide-gray-50">
+                        {transactions.slice(0, 15).map(t => (
+                            <div key={t.id} onClick={() => onDeleteTx(t.id)} className="p-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer active:bg-gray-100 transition border-b border-gray-50 last:border-0">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                                        <div className="w-4 h-4 text-black flex items-center justify-center">{getIcon(t.category)}</div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-semibold text-sm">{t.category}</div>
+                                        <div className="text-xs text-gray-400">
+                                            {new Date(t.date).toLocaleDateString('uk-UA', {day: 'numeric', month: 'long'})}
+                                            {t.currency === 'USDT' && <span className="ml-1 text-green-600 font-medium">({t.original_amount} USDT)</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className={`font-bold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                    {t.type === 'income' ? '+' : '-'}{formatMoney(t.amount)} ₴
+                                </span>
+                            </div>
+                        ))}
+                        {transactions.length === 0 && <div className="p-8 text-center text-gray-400">Пусто</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function AnalyticsView({ transactions }) {
+            const [type, setType] = useState('expense');
+            const [filter, setFilter] = useState('month'); 
+
+            const filtered = useMemo(() => {
+                const now = new Date();
+                return transactions.filter(t => {
+                    if (t.type !== type) return false;
+                    const d = new Date(t.date);
+                    if (filter === 'day') return d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+                    if (filter === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                    const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+                    return d >= oneWeekAgo;
+                });
+            }, [transactions, type, filter]);
+
+            const grouped = useMemo(() => {
+                const map = {};
+                let total = 0;
+                filtered.forEach(t => {
+                    map[t.category] = (map[t.category] || 0) + t.amount;
+                    total += t.amount;
+                });
+                return { map, total };
+            }, [filtered]);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-gray-100">
+                        {['day', 'week', 'month'].map(f => (
+                            <button key={f} onClick={() => setFilter(f)} className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${filter === f ? 'bg-black text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>
+                                {f === 'day' ? 'Сьогодні' : f === 'week' ? 'Тиждень' : 'Місяць'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex justify-center gap-2">
+                        <button onClick={() => setType('expense')} className={`px-6 py-2 rounded-full font-bold text-sm transition ${type === 'expense' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-100'}`}>Витрати</button>
+                        <button onClick={() => setType('income')} className={`px-6 py-2 rounded-full font-bold text-sm transition ${type === 'income' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-100'}`}>Доходи</button>
+                    </div>
+
+                    <div className="text-center py-4">
+                        <div className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">Всього за період</div>
+                        <div className="text-4xl font-bold">{formatMoney(grouped.total)} ₴</div>
+                    </div>
+
+                    <div className="space-y-3">
+                        {Object.entries(grouped.map).sort((a,b) => b[1] - a[1]).map(([cat, amount]) => (
+                            <div key={cat} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                                <div className="flex items-center gap-3 w-full">
+                                    <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                                        <div className="w-4 h-4 text-black flex items-center justify-center">{getIcon(cat)}</div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="font-bold text-sm truncate pr-2">{cat}</span>
+                                            <span className="font-bold text-sm">{formatMoney(amount)} ₴</span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                            <div className="h-full bg-black rounded-full" style={{width: `${(amount/grouped.total)*100}%`}}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {Object.keys(grouped.map).length === 0 && <div className="p-10 text-center text-gray-400 text-sm">Операцій не знайдено</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function StashView({ stashes, onAdd, onDeposit, onBreak }) {
+            return (
+                <div className="space-y-6">
+                    <button onClick={onAdd} className="w-full p-4 bg-black text-white rounded-2xl font-bold shadow-lg">Створити скарбничку</button>
+                    <div className="space-y-4">
+                        {stashes.map(s => {
+                            const progress = s.target_amount ? Math.min((s.current_amount / s.target_amount) * 100, 100) : 0;
+                            return (
+                                <div key={s.id} className="bg-white p-6 rounded-3xl shadow-md border border-gray-100">
+                                    <div className="flex justify-between mb-2">
+                                        <h3 className="font-bold text-lg">{s.title}</h3>
+                                        <span className="font-mono font-bold text-black">{formatMoney(s.current_amount)} {s.currency === 'USDT' ? 'USDT' : '₴'}</span>
+                                    </div>
+                                    {s.target_amount > 0 && (
+                                        <div className="mb-4">
+                                            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
+                                                <div className="h-full bg-black rounded-full transition-all duration-500" style={{width: `${progress}%`}}></div>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-gray-500 font-medium">
+                                                <span>Зібрано: {formatMoney(s.current_amount)} {s.currency === 'USDT' ? 'USDT' : '₴'}</span>
+                                                <span>Ціль: {formatMoney(s.target_amount)} {s.currency === 'USDT' ? 'USDT' : '₴'}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <button onClick={()=>onDeposit(s)} className="flex-1 py-3 bg-gray-900 text-white rounded-xl text-sm font-bold">Поповнити</button>
+                                        <button onClick={()=>onBreak(s.id)} className="px-4 py-3 bg-white text-black border border-gray-200 rounded-xl text-sm font-bold hover:bg-gray-50">Розбити</button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {stashes.length === 0 && <div className="text-center text-gray-400 py-10">Немає заначок</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- MODALS ---
+
+        function ModalController({ modal, close, ...props }) {
+            const [amount, setAmount] = useState('');
+            const [cat, setCat] = useState('');
+            const [cur, setCur] = useState('UAH');
+            const [title, setTitle] = useState('');
+            const [target, setTarget] = useState('');
+            
+            // deposit_stash specific
+            const [inputCur, setInputCur] = useState('UAH');
+
+            // Transactions
+            if (modal.type === 'income' || modal.type === 'expense') {
+                const uahVal = cur === 'USDT' ? amount * USDT_RATE : parseFloat(amount);
+                return (
+                    <div className="fixed inset-0 bg-black/60 z-[110] flex items-end justify-center md:items-center backdrop-blur-sm" onClick={close}>
+                        <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold">{modal.type === 'income' ? 'Зарахування' : 'Витрата'}</h2>
+                                <button onClick={close} className="p-2 bg-gray-100 rounded-full">✕</button>
+                            </div>
+                            <div className="flex justify-center mb-6 bg-gray-100 p-1 rounded-xl w-fit mx-auto">
+                                <button onClick={()=>setCur('UAH')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='UAH'?'bg-white shadow':''}`}>UAH</button>
+                                <button onClick={()=>setCur('USDT')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='USDT'?'bg-white shadow':''}`}>USDT</button>
+                            </div>
+                            <div className="mb-6 text-center">
+                                <input 
+                                    type="number" 
+                                    autoFocus 
+                                    min="0"
+                                    onKeyDown={e => ['-', '+', 'e', 'E', '='].includes(e.key) && e.preventDefault()}
+                                    className="w-full text-5xl font-bold text-center outline-none bg-transparent" 
+                                    placeholder="0" 
+                                    value={amount} 
+                                    onChange={e=>setAmount(e.target.value)} 
+                                />
+                                {cur === 'USDT' && <div className="text-sm text-gray-500 mt-2">≈ {uahVal.toLocaleString()} ₴</div>}
+                            </div>
+                            <input className="w-full p-4 bg-gray-50 rounded-2xl mb-4 text-center font-semibold outline-none focus:ring-2 focus:ring-black" placeholder="Категорія..." value={cat} onChange={e=>setCat(e.target.value)} />
+                             <div className="flex flex-wrap justify-center gap-2 max-h-32 overflow-y-auto mb-4 hide-scrollbar">
+                                {props.categories.filter(c=>c.type===modal.type).map(c => (
+                                    <div key={c.id} onClick={() => setCat(c.name)} className={`px-3 py-2 rounded-xl text-xs font-bold border cursor-pointer flex gap-1 ${cat===c.name?'bg-black text-white':'bg-white'}`}>
+                                        <div className="w-3 h-3 flex items-center justify-center">{getIcon(c.name)}</div>
+                                        {c.name}<span onClick={(e)=>{e.stopPropagation();props.deleteCategory(c.id)}} className="opacity-50 hover:text-red-500">✕</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={()=>{
+                                if(modal.type==='expense' && uahVal > props.balance) return props.showToast('Недостатньо коштів!');
+                                props.addTx(uahVal, parseFloat(amount), cur, cat, modal.type);
+                            }} disabled={!amount || !cat} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Зберегти</button>
+                        </div>
+                    </div>
+                )
+            }
+
+            // Create Stash
+            if (modal.type === 'stash') {
+                return (
+                    <div className="fixed inset-0 bg-black/60 z-[110] flex items-end justify-center md:items-center backdrop-blur-sm" onClick={close}>
+                        <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold">Створити скарбничку</h2>
+                                <button onClick={close} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">✕</button>
+                            </div>
+                            <input className="w-full p-4 bg-gray-50 rounded-2xl mb-4 font-semibold outline-none focus:ring-2 focus:ring-black" placeholder="Назва (напр. Машина)" value={title} onChange={e=>setTitle(e.target.value)} />
+                            <input type="number" className="w-full p-4 bg-gray-50 rounded-2xl mb-4 font-semibold outline-none focus:ring-2 focus:ring-black" placeholder="Ціль (сума, необов'язково)" value={target} onChange={e=>setTarget(e.target.value)} />
+                             <div className="flex justify-center mb-6 bg-gray-100 p-1 rounded-xl">
+                                <button onClick={()=>setCur('UAH')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='UAH'?'bg-white shadow':''}`}>UAH</button>
+                                <button onClick={()=>setCur('USDT')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='USDT'?'bg-white shadow':''}`}>USDT</button>
+                            </div>
+                            <button onClick={()=>props.addStash(title, parseFloat(target)||0, cur)} disabled={!title} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Створити</button>
+                        </div>
+                    </div>
+                )
+            }
+
+            // Deposit Stash
+            if (modal.type === 'deposit_stash') {
+                const s = modal.data;
+                const uahVal = inputCur === 'USDT' ? amount * USDT_RATE : parseFloat(amount);
+                const stashVal = s.currency === 'USDT' 
+                    ? (inputCur === 'UAH' ? amount / USDT_RATE : parseFloat(amount)) 
+                    : (inputCur === 'USDT' ? amount * USDT_RATE : parseFloat(amount));
+
+                return (
+                     <div className="fixed inset-0 bg-black/60 z-[110] flex items-end justify-center md:items-center backdrop-blur-sm" onClick={close}>
+                        <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold">Поповнити: {s.title}</h2>
+                                <button onClick={close} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition">✕</button>
+                            </div>
+                            <p className="text-gray-400 text-sm mb-6">Спишеться з основного балансу</p>
+                            
+                            <div className="flex justify-center mb-6 bg-gray-100 p-1 rounded-xl w-fit mx-auto">
+                                <button onClick={()=>setInputCur('UAH')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${inputCur==='UAH'?'bg-white shadow':''}`}>UAH</button>
+                                <button onClick={()=>setInputCur('USDT')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${inputCur==='USDT'?'bg-white shadow':''}`}>USDT</button>
+                            </div>
+
+                            <div className="mb-6 text-center">
+                                <input 
+                                    type="number" 
+                                    autoFocus 
+                                    min="0"
+                                    onKeyDown={e => ['-', '+', 'e', 'E', '='].includes(e.key) && e.preventDefault()}
+                                    className="w-full text-5xl font-bold text-center outline-none bg-transparent" 
+                                    placeholder="0" 
+                                    value={amount} 
+                                    onChange={e=>setAmount(e.target.value)} 
+                                />
+                                <div className="text-gray-400 text-sm font-medium mt-2">{inputCur}</div>
+                                <div className="text-sm text-gray-500 mt-2 flex flex-col gap-1">
+                                    <span>Зарахується: {stashVal.toLocaleString(undefined, {maximumFractionDigits: 2})} {s.currency}</span>
+                                    <span>Спишеться: {uahVal.toLocaleString(undefined, {maximumFractionDigits: 2})} ₴</span>
+                                </div>
+                            </div>
+                            <button onClick={()=>{
+                                if(uahVal > props.balance) return props.showToast('Недостатньо коштів!');
+                                props.depositStash(s.id, parseFloat(stashVal), parseFloat(uahVal));
+                            }} disabled={!amount} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Поповнити</button>
+                        </div>
+                    </div>
+                )
+            }
+        }
+
+        function NavBtn({ icon, label, active, onClick }) {
+            return (
+                <button onClick={onClick} className={`flex flex-col items-center gap-1 w-16 transition ${active ? 'text-black' : 'text-gray-400 hover:text-gray-600'}`}>
+                    <div className={`text-2xl ${active ? 'scale-110' : ''} transition-transform`}>{icon}</div>
+                    <span className="text-[10px] font-bold">{label}</span>
+                </button>
+            );
+        }
+
+        function ConfirmModal({ title, onConfirm, onCancel }) { return <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center px-4 backdrop-blur-sm" onClick={onCancel}><div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl animate-scale-in" onClick={e=>e.stopPropagation()}><h3 className="text-lg font-bold text-center mb-6">{title}</h3><div className="flex gap-3"><button onClick={onCancel} className="flex-1 p-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Ні</button><button onClick={onConfirm} className="flex-1 p-3 bg-black text-white rounded-xl font-bold shadow-lg">Так</button></div></div></div> }
+        
+        function ActionBtn({ type, onClick, label }) { 
+            const isInc = type === 'income'; 
+            return <button onClick={onClick} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-center gap-3 active:scale-95 transition border border-gray-50 group"><div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition ${isInc?'bg-green-50 text-green-600 group-hover:bg-green-100':'bg-red-50 text-red-600 group-hover:bg-red-100'}`}>{isInc?<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>}</div><span className="font-bold text-sm text-gray-700">{label}</span></button> 
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
