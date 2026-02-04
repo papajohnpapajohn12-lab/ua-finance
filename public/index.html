@@ -2,9 +2,14 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>UA Finance</title>
     <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -220,7 +225,7 @@
                                     )}
                                 </button>
                             </div>
-                            <button className="w-full p-4 bg-black text-white rounded-2xl font-bold shadow-lg active:scale-95 transition">{isLogin ? 'Увійти' : 'Продовжити'}</button>
+                            <button className="w-full p-3 md:p-4 bg-black text-white rounded-2xl font-bold shadow-lg active:scale-95 transition">{isLogin ? 'Увійти' : 'Продовжити'}</button>
                         </form>
                         <p className="text-center mt-6 text-sm text-gray-400 cursor-pointer hover:text-black" onClick={()=>{setIsLogin(!isLogin); setError('');}}>{isLogin ? 'Створити акаунт' : 'Увійти'}</p>
                     </div>
@@ -580,7 +585,7 @@
                             <button onClick={()=>{
                                 if(modal.type==='expense' && uahVal > props.balance) return props.showToast('Недостатньо коштів!');
                                 props.addTx(uahVal, parseFloat(amount), cur, cat, modal.type);
-                            }} disabled={!amount || !cat} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Зберегти</button>
+                            }} disabled={!amount || !cat} className="w-full p-3 md:p-4 bg-black text-white rounded-2xl font-bold text-base md:text-lg disabled:opacity-50 active:scale-95 transition">Зберегти</button>
                         </div>
                     </div>
                 )
@@ -601,7 +606,7 @@
                                 <button onClick={()=>setCur('UAH')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='UAH'?'bg-white shadow':''}`}>UAH</button>
                                 <button onClick={()=>setCur('USDT')} className={`px-4 py-1 rounded-lg text-sm font-bold transition ${cur==='USDT'?'bg-white shadow':''}`}>USDT</button>
                             </div>
-                            <button onClick={()=>props.addStash(title, parseFloat(target)||0, cur)} disabled={!title} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Створити</button>
+                            <button onClick={()=>props.addStash(title, parseFloat(target)||0, cur)} disabled={!title} className="w-full p-3 md:p-4 bg-black text-white rounded-2xl font-bold text-base md:text-lg disabled:opacity-50 active:scale-95 transition">Створити</button>
                         </div>
                     </div>
                 )
@@ -649,7 +654,7 @@
                             <button onClick={()=>{
                                 if(uahVal > props.balance) return props.showToast('Недостатньо коштів!');
                                 props.depositStash(s.id, parseFloat(stashVal), parseFloat(uahVal));
-                            }} disabled={!amount} className="w-full p-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-50">Поповнити</button>
+                            }} disabled={!amount} className="w-full p-3 md:p-4 bg-black text-white rounded-2xl font-bold text-base md:text-lg disabled:opacity-50 active:scale-95 transition">Поповнити</button>
                         </div>
                     </div>
                 )
